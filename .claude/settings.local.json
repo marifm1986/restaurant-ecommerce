@@ -1,0 +1,11 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(npm install:*)",
+      "Bash(del \"d:\\\\restaurant-ecommerce\\\\app\\\\page.tsx\")",
+      "Bash(npm run build:*)",
+      "Bash(cat:*)",
+      "Bash(mkdir:*)"
+    ]
+  }
+}
