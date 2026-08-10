@@ -5,9 +5,10 @@ import { Plus, Minus, ShoppingCart } from 'lucide-react';
 import { useState } from 'react';
 import { Product } from '@/types';
 import { Badge, Button } from '@/components/ui';
-import { formatCurrency, getStockStatus, STOCK_STATUS_CONFIG } from '@/lib/utils';
+import { getStockStatus, STOCK_STATUS_CONFIG } from '@/lib/utils';
 import { useCartStore } from '@/stores/cart-store';
 import { useToast } from '@/components/ui/toast';
+import { useSettings } from '@/providers/settings-provider';
 
 interface ProductCardProps {
   product: Product;
@@ -17,6 +18,7 @@ export function ProductCard({ product }: ProductCardProps) {
   const [quantity, setQuantity] = useState(1);
   const addItem = useCartStore((state) => state.addItem);
   const { success } = useToast();
+  const { formatPrice } = useSettings();
 
   const stockStatus = getStockStatus(product.stockQty);
   const stockConfig = STOCK_STATUS_CONFIG[stockStatus];
@@ -100,7 +102,7 @@ export function ProductCard({ product }: ProductCardProps) {
         {/* Price */}
         <div className="flex items-baseline gap-1 mb-3">
           <span className="text-lg font-bold text-gray-900">
-            {formatCurrency(product.price)}
+            {formatPrice(product.price)}
           </span>
           <span className="text-sm text-gray-500">/{product.unit}</span>
         </div>

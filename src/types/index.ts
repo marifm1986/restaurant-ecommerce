@@ -30,8 +30,15 @@ export interface User {
 }
 
 // Product Types
-export type ProductUnit = 'kg' | 'piece' | 'case' | 'liter' | 'dozen';
+export type ProductUnit = 'kg' | 'gram' | 'liter' | 'ml' | 'piece' | 'dozen' | 'case' | 'pack' | 'box' | 'bag';
 export type StockStatus = 'in_stock' | 'low_stock' | 'out_of_stock';
+
+// Product variant represents the available sizes/weights for a product
+export interface ProductVariant {
+  value: number;
+  unit: string; // Display unit (e.g., 'gm', 'kg', 'ml', 'L')
+  label: string; // Display label (e.g., '500gm', '1kg')
+}
 
 export interface BulkPricing {
   minQty: number;
@@ -46,9 +53,11 @@ export interface Product {
   category: string;
   description: string;
   price: number;
+  purchasePrice?: number; // Cost price for margin tracking
   bulkPricing: BulkPricing[];
   stockQty: number;
   unit: ProductUnit;
+  variants?: ProductVariant[]; // Available size/weight variants
   imageUrls: string[];
   isActive: boolean;
   createdAt: Date;

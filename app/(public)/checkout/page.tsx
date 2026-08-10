@@ -8,9 +8,11 @@ import { ArrowLeft, ShoppingBag, CheckCircle } from 'lucide-react';
 import { useCartStore } from '@/stores/cart-store';
 import { Button, Input, Card } from '@/components/ui';
 import { useToast } from '@/components/ui/toast';
-import { formatCurrency, generateOrderId, isValidEmail, isValidPhone } from '@/lib/utils';
+import { isValidEmail, isValidPhone, getPhoneValidationMessage, getPhonePlaceholder } from '@/lib/utils';
 import { APP_CONFIG } from '@/config/features';
-import { GuestInfo } from '@/types';
+import { GuestInfo, Order } from '@/types';
+import { useSettings } from '@/providers/settings-provider';
+import { OrderReceipt, ShareReceipt } from '@/components/orders';
 
 interface FormErrors {
   name?: string;
@@ -23,10 +25,11 @@ export default function CheckoutPage() {
   const router = useRouter();
   const { success, error: showError } = useToast();
   const { items, getSubtotal, getTax, getTotal, clearCart } = useCartStore();
+  const { formatPrice, currencyCode } = useSettings();
 
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [orderComplete, setOrderComplete] = useState(false);
-  const [orderId, setOrderId] = useState('');
+  const [completedOrder, setCompletedOrder] = useState<Order | null>(null);
 
   const [formData, setFormData] = useState<GuestInfo>({
     name: '',
@@ -46,8 +49,8 @@ export default function CheckoutPage() {
 
     if (!formData.phone.trim()) {
       newErrors.phone = 'Phone number is required';
-    } else if (!isValidPhone(formData.phone)) {
-      newErrors.phone = 'Enter a valid 10-digit phone number';
+    } else if (!isValidPhone(formData.phone, currencyCode)) {
+      newErrors.phone = getPhoneValidationMessage(currencyCode);
     }
 
     if (!formData.email.trim()) {
@@ -84,43 +87,62 @@ export default function CheckoutPage() {
     setIsSubmitting(true);
 
     try {
-      // Generate order ID
-      const newOrderId = generateOrderId();
+      const response = await fetch('/api/orders', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          items: items.map(item => ({
+            productId: item.productId,
+            productName: item.productName,
+            qty: item.qty,
+            unitPrice: item.price,
+            totalPrice: item.price * item.qty,
+            unit: item.unit,
+          })),
+          guestInfo: formData,
+          subtotal: getSubtotal(),
+          tax: getTax(),
+          total: getTotal(),
+        }),
+      });
 
-      // In a real app, this would call an API to create the order
-      // For now, we'll simulate the order creation
-      await new Promise((resolve) => setTimeout(resolve, 1500));
+      const result = await response.json();
 
-      // TODO: Replace with actual Firestore order creation
-      // const orderData = {
-      //   orderId: newOrderId,
-      //   companyId: APP_CONFIG.COMPANY_ID,
-      //   userId: null, // Guest order
-      //   guestInfo: formData,
-      //   items: items.map(item => ({
-      //     productId: item.productId,
-      //     productName: item.productName,
-      //     qty: item.qty,
-      //     unitPrice: item.price,
-      //     totalPrice: item.price * item.qty,
-      //     unit: item.unit,
-      //   })),
-      //   subtotal: getSubtotal(),
-      //   tax: getTax(),
-      //   total: getTotal(),
-      //   status: 'pending_payment',
-      //   paymentStatus: 'pending',
-      //   notes: '',
-      //   createdAt: new Date(),
-      //   updatedAt: new Date(),
-      // };
+      if (!result.success) {
+        throw new Error(result.error?.message || 'Failed to place order');
+      }
 
-      setOrderId(newOrderId);
+      // Build the completed order object for receipt
+      const orderData: Order = {
+        id: result.data.id,
+        orderId: result.data.orderId,
+        companyId: APP_CONFIG.COMPANY_ID,
+        userId: null,
+        guestInfo: formData,
+        items: items.map(item => ({
+          productId: item.productId,
+          productName: item.productName,
+          qty: item.qty,
+          unitPrice: item.price,
+          totalPrice: item.price * item.qty,
+          unit: item.unit,
+        })),
+        subtotal: getSubtotal(),
+        tax: getTax(),
+        total: getTotal(),
+        status: 'pending_payment',
+        paymentStatus: 'pending',
+        notes: '',
+        createdAt: new Date(),
+        updatedAt: new Date(),
+      };
+
+      setCompletedOrder(orderData);
       setOrderComplete(true);
       clearCart();
-      success('Order placed successfully!', `Order ID: ${newOrderId}`);
+      success('Order placed successfully!', `Order ID: ${result.data.orderId}`);
     } catch (err) {
-      showError('Failed to place order', 'Please try again or contact support.');
+      showError('Failed to place order', err instanceof Error ? err.message : 'Please try again or contact support.');
     } finally {
       setIsSubmitting(false);
     }
@@ -145,40 +167,58 @@ export default function CheckoutPage() {
   }
 
   // Order complete
-  if (orderComplete) {
+  if (orderComplete && completedOrder) {
     return (
-      <div className="max-w-2xl mx-auto px-4 sm:px-6 lg:px-8 py-12">
-        <Card variant="bordered" className="text-center">
-          <div className="w-16 h-16 mx-auto mb-6 bg-green-100 rounded-full flex items-center justify-center">
+      <div className="max-w-4xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
+        {/* Success Header */}
+        <div className="text-center mb-8">
+          <div className="w-16 h-16 mx-auto mb-4 bg-green-100 rounded-full flex items-center justify-center">
             <CheckCircle className="w-8 h-8 text-green-600" />
           </div>
           <h1 className="text-2xl font-bold text-gray-900 mb-2">Order Placed Successfully!</h1>
-          <p className="text-gray-600 mb-6">
+          <p className="text-gray-600">
             Thank you for your order. We will process it shortly.
           </p>
+        </div>
 
-          <div className="bg-gray-50 rounded-lg p-4 mb-6">
-            <p className="text-sm text-gray-500 mb-1">Order ID</p>
-            <p className="text-lg font-mono font-bold text-gray-900">{orderId}</p>
+        <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
+          {/* Receipt */}
+          <div className="lg:col-span-2">
+            <Card variant="bordered" className="overflow-hidden">
+              <div className="bg-gray-50 px-4 py-3 border-b border-gray-200">
+                <h2 className="font-semibold text-gray-900">Order Receipt</h2>
+              </div>
+              <OrderReceipt order={completedOrder} formatPrice={formatPrice} />
+            </Card>
           </div>
 
-          <div className="bg-orange-50 border border-orange-200 rounded-lg p-4 mb-6 text-left">
-            <h3 className="font-medium text-orange-800 mb-2">Payment Instructions</h3>
-            <p className="text-sm text-orange-700">
-              This is a manual payment order. Please make the payment via UPI, bank transfer, or cash.
-              Contact us at <strong>01756196928</strong> to confirm your payment.
-            </p>
-          </div>
+          {/* Share & Actions */}
+          <div className="space-y-6">
+            {/* Share Options */}
+            <Card variant="bordered">
+              <ShareReceipt order={completedOrder} formatPrice={formatPrice} />
+            </Card>
 
-          <div className="flex flex-col sm:flex-row gap-3 justify-center">
-            <Link href="/">
-              <Button variant="outline">Continue Shopping</Button>
-            </Link>
-            <Link href={`/orders/track?id=${orderId}`}>
-              <Button>Track Order</Button>
-            </Link>
+            {/* Payment Instructions */}
+            <Card variant="bordered" className="bg-orange-50 border-orange-200">
+              <h3 className="font-medium text-orange-800 mb-2">Payment Instructions</h3>
+              <p className="text-sm text-orange-700">
+                This is a manual payment order. Please make the payment via UPI, bank transfer, or cash.
+                Contact us at <strong>01756196928</strong> to confirm your payment.
+              </p>
+            </Card>
+
+            {/* Action Buttons */}
+            <div className="space-y-3">
+              <Link href={`/orders/track?id=${completedOrder.orderId}`} className="block">
+                <Button className="w-full">Track Order</Button>
+              </Link>
+              <Link href="/" className="block">
+                <Button variant="outline" className="w-full">Continue Shopping</Button>
+              </Link>
+            </div>
           </div>
-        </Card>
+        </div>
       </div>
     );
   }
@@ -218,7 +258,7 @@ export default function CheckoutPage() {
                   <Input
                     label="Phone Number"
                     type="tel"
-                    placeholder="10-digit mobile number"
+                    placeholder={getPhonePlaceholder(currencyCode)}
                     value={formData.phone}
                     onChange={handleInputChange('phone')}
                     error={errors.phone}
@@ -306,11 +346,11 @@ export default function CheckoutPage() {
                         {item.productName}
                       </p>
                       <p className="text-xs text-gray-500">
-                        {item.qty} x {formatCurrency(item.price)}
+                        {item.qty} x {formatPrice(item.price)}
                       </p>
                     </div>
                     <p className="text-sm font-medium text-gray-900">
-                      {formatCurrency(item.price * item.qty)}
+                      {formatPrice(item.price * item.qty)}
                     </p>
                   </div>
                 ))}
@@ -320,11 +360,11 @@ export default function CheckoutPage() {
               <div className="border-t border-gray-100 pt-4 space-y-2">
                 <div className="flex justify-between text-sm">
                   <span className="text-gray-600">Subtotal</span>
-                  <span className="font-medium">{formatCurrency(getSubtotal())}</span>
+                  <span className="font-medium">{formatPrice(getSubtotal())}</span>
                 </div>
                 <div className="flex justify-between text-sm">
                   <span className="text-gray-600">Tax ({APP_CONFIG.TAX_RATE * 100}% GST)</span>
-                  <span className="font-medium">{formatCurrency(getTax())}</span>
+                  <span className="font-medium">{formatPrice(getTax())}</span>
                 </div>
                 <div className="flex justify-between text-sm">
                   <span className="text-gray-600">Delivery</span>
@@ -336,7 +376,7 @@ export default function CheckoutPage() {
                 <div className="flex justify-between">
                   <span className="text-base font-semibold text-gray-900">Total</span>
                   <span className="text-xl font-bold text-gray-900">
-                    {formatCurrency(getTotal())}
+                    {formatPrice(getTotal())}
                   </span>
                 </div>
               </div>

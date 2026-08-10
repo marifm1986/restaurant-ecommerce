@@ -102,18 +102,91 @@ export function isValidEmail(email: string): boolean {
   return emailRegex.test(email);
 }
 
-// Validate phone (Indian format)
-export function isValidPhone(phone: string): boolean {
-  const phoneRegex = /^[6-9]\d{9}$/;
-  return phoneRegex.test(phone.replace(/\D/g, ''));
+// Phone validation rules by currency/country
+export const PHONE_FORMATS: Record<string, {
+  pattern: RegExp;
+  example: string;
+  countryCode: string;
+  minDigits: number;
+  maxDigits: number;
+}> = {
+  INR: { pattern: /^[6-9]\d{9}$/, example: '9876543210', countryCode: '+91', minDigits: 10, maxDigits: 10 },
+  USD: { pattern: /^\d{10}$/, example: '2025551234', countryCode: '+1', minDigits: 10, maxDigits: 10 },
+  EUR: { pattern: /^\d{9,12}$/, example: '1234567890', countryCode: '+49', minDigits: 9, maxDigits: 12 },
+  GBP: { pattern: /^[0-9]{10,11}$/, example: '07123456789', countryCode: '+44', minDigits: 10, maxDigits: 11 },
+  AED: { pattern: /^[0-9]{9}$/, example: '501234567', countryCode: '+971', minDigits: 9, maxDigits: 9 },
+  SAR: { pattern: /^[0-9]{9}$/, example: '512345678', countryCode: '+966', minDigits: 9, maxDigits: 9 },
+  CAD: { pattern: /^\d{10}$/, example: '4165551234', countryCode: '+1', minDigits: 10, maxDigits: 10 },
+  AUD: { pattern: /^[0-9]{9,10}$/, example: '0412345678', countryCode: '+61', minDigits: 9, maxDigits: 10 },
+  SGD: { pattern: /^[89]\d{7}$/, example: '81234567', countryCode: '+65', minDigits: 8, maxDigits: 8 },
+  MYR: { pattern: /^[0-9]{9,10}$/, example: '0123456789', countryCode: '+60', minDigits: 9, maxDigits: 10 },
+  PKR: { pattern: /^[0-9]{10}$/, example: '3001234567', countryCode: '+92', minDigits: 10, maxDigits: 10 },
+  BDT: { pattern: /^[0-9]{10,11}$/, example: '01712345678', countryCode: '+880', minDigits: 10, maxDigits: 11 },
+  LKR: { pattern: /^[0-9]{9}$/, example: '712345678', countryCode: '+94', minDigits: 9, maxDigits: 9 },
+  NPR: { pattern: /^[0-9]{10}$/, example: '9812345678', countryCode: '+977', minDigits: 10, maxDigits: 10 },
+};
+
+// Get phone format for a currency code
+export function getPhoneFormat(currencyCode: string = APP_CONFIG.DEFAULT_CURRENCY) {
+  return PHONE_FORMATS[currencyCode] || PHONE_FORMATS.INR;
 }
 
-// Format phone number
-export function formatPhone(phone: string): string {
+// Validate phone based on currency/country
+export function isValidPhone(phone: string, currencyCode?: string): boolean {
+  const format = getPhoneFormat(currencyCode);
   const digits = phone.replace(/\D/g, '');
-  if (digits.length === 10) {
-    return `+91 ${digits.substring(0, 5)} ${digits.substring(5)}`;
+  return format.pattern.test(digits);
+}
+
+// Get phone validation error message
+export function getPhoneValidationMessage(currencyCode?: string): string {
+  const format = getPhoneFormat(currencyCode);
+  if (format.minDigits === format.maxDigits) {
+    return `Enter a valid ${format.minDigits}-digit phone number`;
   }
+  return `Enter a valid ${format.minDigits}-${format.maxDigits} digit phone number`;
+}
+
+// Get phone placeholder
+export function getPhonePlaceholder(currencyCode?: string): string {
+  const format = getPhoneFormat(currencyCode);
+  return format.example;
+}
+
+// Format phone number based on currency/country
+export function formatPhone(phone: string, currencyCode?: string): string {
+  const format = getPhoneFormat(currencyCode);
+  const digits = phone.replace(/\D/g, '');
+
+  // Format based on country
+  switch (currencyCode) {
+    case 'INR':
+      if (digits.length === 10) {
+        return `${format.countryCode} ${digits.substring(0, 5)} ${digits.substring(5)}`;
+      }
+      break;
+    case 'USD':
+    case 'CAD':
+      if (digits.length === 10) {
+        return `${format.countryCode} (${digits.substring(0, 3)}) ${digits.substring(3, 6)}-${digits.substring(6)}`;
+      }
+      break;
+    case 'GBP':
+      if (digits.length >= 10) {
+        return `${format.countryCode} ${digits.substring(0, 4)} ${digits.substring(4)}`;
+      }
+      break;
+    case 'BDT':
+      if (digits.length >= 10) {
+        return `${format.countryCode} ${digits.substring(0, 5)} ${digits.substring(5)}`;
+      }
+      break;
+    default:
+      if (digits.length >= format.minDigits) {
+        return `${format.countryCode} ${digits}`;
+      }
+  }
+
   return phone;
 }
 

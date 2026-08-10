@@ -6,12 +6,14 @@ import Image from 'next/image';
 import { Plus, Search, Edit, Trash2, Package, RefreshCw, Database } from 'lucide-react';
 import { Card, Button, Badge, Input, Select, Modal, ModalFooter, TableRowSkeleton } from '@/components/ui';
 import { useToast } from '@/components/ui/toast';
-import { formatCurrency, getStockStatus } from '@/lib/utils';
+import { getStockStatus } from '@/lib/utils';
 import { PRODUCT_CATEGORIES } from '@/config/features';
 import { Product } from '@/types';
+import { useSettings } from '@/providers/settings-provider';
 
 export default function AdminProductsPage() {
   const { success, error: showError } = useToast();
+  const { formatPrice } = useSettings();
   const [products, setProducts] = useState<Product[]>([]);
   const [loading, setLoading] = useState(true);
   const [searchQuery, setSearchQuery] = useState('');
@@ -254,7 +256,7 @@ export default function AdminProductsPage() {
                       </td>
                       <td className="px-4 py-4">
                         <span className="font-medium text-gray-900">
-                          {formatCurrency(product.price)}
+                          {formatPrice(product.price)}
                         </span>
                       </td>
                       <td className="px-4 py-4">

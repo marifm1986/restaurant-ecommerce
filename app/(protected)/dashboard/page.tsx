@@ -12,8 +12,9 @@ import {
 } from 'lucide-react';
 import { Card, CardHeader, CardTitle, CardContent, Badge, Button } from '@/components/ui';
 import { useAuthStore } from '@/stores/auth-store';
-import { formatCurrency, formatDate } from '@/lib/utils';
+import { formatDate } from '@/lib/utils';
 import { ORDER_STATUS_CONFIG } from '@/config/features';
+import { useSettings } from '@/providers/settings-provider';
 
 // Mock data for dashboard
 const mockLedgerSummary = {
@@ -56,6 +57,7 @@ const mockSubscription = {
 
 export default function DashboardPage() {
   const { user } = useAuthStore();
+  const { formatPrice } = useSettings();
 
   const getStatusBadgeVariant = (status: keyof typeof ORDER_STATUS_CONFIG) => {
     switch (status) {
@@ -112,7 +114,7 @@ export default function DashboardPage() {
             <div>
               <p className="text-sm text-gray-500">Total Purchases</p>
               <p className="text-2xl font-bold text-gray-900 mt-1">
-                {formatCurrency(mockLedgerSummary.totalPurchases)}
+                {formatPrice(mockLedgerSummary.totalPurchases)}
               </p>
             </div>
             <div className="w-10 h-10 bg-blue-100 rounded-lg flex items-center justify-center">
@@ -126,7 +128,7 @@ export default function DashboardPage() {
             <div>
               <p className="text-sm text-gray-500">Total Payments</p>
               <p className="text-2xl font-bold text-gray-900 mt-1">
-                {formatCurrency(mockLedgerSummary.totalPayments)}
+                {formatPrice(mockLedgerSummary.totalPayments)}
               </p>
             </div>
             <div className="w-10 h-10 bg-green-100 rounded-lg flex items-center justify-center">
@@ -140,7 +142,7 @@ export default function DashboardPage() {
             <div>
               <p className="text-sm text-gray-500">Current Dues</p>
               <p className="text-2xl font-bold text-orange-600 mt-1">
-                {formatCurrency(mockLedgerSummary.currentDues)}
+                {formatPrice(mockLedgerSummary.currentDues)}
               </p>
             </div>
             <div className="w-10 h-10 bg-orange-100 rounded-lg flex items-center justify-center">
@@ -197,7 +199,7 @@ export default function DashboardPage() {
                         {order.itemCount} items • {formatDate(order.createdAt)}
                       </span>
                       <span className="font-medium text-gray-900">
-                        {formatCurrency(order.total)}
+                        {formatPrice(order.total)}
                       </span>
                     </div>
                   </Link>
@@ -255,7 +257,7 @@ export default function DashboardPage() {
                 <p className="font-medium text-orange-900">Payment Reminder</p>
                 <p className="text-sm text-orange-700 mt-0.5">
                   You have outstanding dues of{' '}
-                  <strong>{formatCurrency(mockLedgerSummary.currentDues)}</strong>. Please make a
+                  <strong>{formatPrice(mockLedgerSummary.currentDues)}</strong>. Please make a
                   payment to continue enjoying our services.
                 </p>
               </div>

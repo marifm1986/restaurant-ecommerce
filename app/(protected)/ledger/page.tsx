@@ -3,8 +3,9 @@
 import { useState } from 'react';
 import { Download, Filter, FileText, ArrowUpRight, ArrowDownRight } from 'lucide-react';
 import { Card, CardHeader, CardTitle, CardContent, Button, Badge, Select } from '@/components/ui';
-import { formatCurrency, formatDate, formatDateTime } from '@/lib/utils';
+import { formatDate, formatDateTime } from '@/lib/utils';
 import { LedgerEntryType } from '@/types';
+import { useSettings } from '@/providers/settings-provider';
 
 // Mock ledger data
 const mockLedgerEntries = [
@@ -73,6 +74,7 @@ const mockSummary = {
 };
 
 export default function LedgerPage() {
+  const { formatPrice } = useSettings();
   const [filterType, setFilterType] = useState('all');
 
   const filteredEntries = mockLedgerEntries.filter((entry) => {
@@ -119,25 +121,25 @@ export default function LedgerPage() {
         <Card variant="bordered" padding="sm">
           <p className="text-xs text-gray-500 uppercase tracking-wide">Total Purchases</p>
           <p className="text-xl font-bold text-gray-900 mt-1">
-            {formatCurrency(mockSummary.totalPurchases)}
+            {formatPrice(mockSummary.totalPurchases)}
           </p>
         </Card>
         <Card variant="bordered" padding="sm">
           <p className="text-xs text-gray-500 uppercase tracking-wide">Total Payments</p>
           <p className="text-xl font-bold text-green-600 mt-1">
-            {formatCurrency(mockSummary.totalPayments)}
+            {formatPrice(mockSummary.totalPayments)}
           </p>
         </Card>
         <Card variant="bordered" padding="sm">
           <p className="text-xs text-gray-500 uppercase tracking-wide">Adjustments</p>
           <p className="text-xl font-bold text-gray-900 mt-1">
-            {formatCurrency(Math.abs(mockSummary.totalAdjustments))}
+            {formatPrice(Math.abs(mockSummary.totalAdjustments))}
           </p>
         </Card>
         <Card variant="bordered" padding="sm" className="bg-orange-50 border-orange-200">
           <p className="text-xs text-orange-600 uppercase tracking-wide">Current Balance</p>
           <p className="text-xl font-bold text-orange-600 mt-1">
-            {formatCurrency(mockSummary.currentBalance)}
+            {formatPrice(mockSummary.currentBalance)}
           </p>
         </Card>
       </div>
@@ -202,10 +204,10 @@ export default function LedgerPage() {
                           }`}
                         >
                           {entry.amount > 0 ? '+' : ''}
-                          {formatCurrency(entry.amount)}
+                          {formatPrice(entry.amount)}
                         </p>
                         <p className="text-xs text-gray-500 mt-0.5">
-                          Balance: {formatCurrency(entry.balanceAfter)}
+                          Balance: {formatPrice(entry.balanceAfter)}
                         </p>
                       </div>
                     </div>

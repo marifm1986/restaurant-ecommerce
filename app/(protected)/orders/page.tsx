@@ -1,77 +1,69 @@
 'use client';
 
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import Link from 'next/link';
-import { Package, Search, Filter, Eye } from 'lucide-react';
+import { Package, Search, RefreshCw, Eye } from 'lucide-react';
 import { Card, Button, Badge, Input, Select } from '@/components/ui';
-import { formatCurrency, formatDate } from '@/lib/utils';
+import { useToast } from '@/components/ui/toast';
+import { formatDate } from '@/lib/utils';
 import { ORDER_STATUS_CONFIG } from '@/config/features';
-
-// Mock orders data
-const mockOrders = [
-  {
-    id: 'ord-001',
-    orderId: 'ORD-MEAT-7HJ4K-X9P2',
-    total: 2450,
-    status: 'delivered' as const,
-    paymentStatus: 'paid' as const,
-    createdAt: new Date(Date.now() - 86400000 * 2),
-    itemCount: 5,
-    items: ['Premium Chicken Breast (5kg)', 'Black Chickpeas (10kg)'],
-  },
-  {
-    id: 'ord-002',
-    orderId: 'ORD-MEAT-8KL5M-Y3Q7',
-    total: 1890,
-    status: 'processing' as const,
-    paymentStatus: 'pending' as const,
-    createdAt: new Date(Date.now() - 86400000),
-    itemCount: 3,
-    items: ['Mutton Leg (2kg)', 'Rajma (5kg)'],
-  },
-  {
-    id: 'ord-003',
-    orderId: 'ORD-MEAT-9MN6N-Z8R4',
-    total: 3200,
-    status: 'pending_payment' as const,
-    paymentStatus: 'pending' as const,
-    createdAt: new Date(),
-    itemCount: 8,
-    items: ['Fresh Prawns (3kg)', 'Lamb Mince (2kg)', 'Tuvar Dal (10kg)'],
-  },
-  {
-    id: 'ord-004',
-    orderId: 'ORD-MEAT-ABCD1-E2F3',
-    total: 4500,
-    status: 'shipped' as const,
-    paymentStatus: 'paid' as const,
-    createdAt: new Date(Date.now() - 86400000 * 5),
-    itemCount: 10,
-    items: ['Whole Chicken (10pc)', 'Green Moong Dal (15kg)'],
-  },
-  {
-    id: 'ord-005',
-    orderId: 'ORD-MEAT-GHIJ4-K5L6',
-    total: 1200,
-    status: 'cancelled' as const,
-    paymentStatus: 'pending' as const,
-    createdAt: new Date(Date.now() - 86400000 * 10),
-    itemCount: 2,
-    items: ['Fish Curry Cut (2kg)'],
-  },
-];
+import { useSettings } from '@/providers/settings-provider';
+import { useAuthStore } from '@/stores/auth-store';
+import { Order, OrderStatus, PaymentStatus } from '@/types';
 
 export default function OrdersPage() {
+  const { formatPrice } = useSettings();
+  const { error: showError } = useToast();
+  const { user } = useAuthStore();
+  const [orders, setOrders] = useState<Order[]>([]);
+  const [isLoading, setIsLoading] = useState(true);
   const [searchQuery, setSearchQuery] = useState('');
   const [statusFilter, setStatusFilter] = useState('all');
+  const [isMounted, setIsMounted] = useState(false);
 
-  const filteredOrders = mockOrders.filter((order) => {
+  useEffect(() => {
+    setIsMounted(true);
+  }, []);
+
+  const fetchOrders = async () => {
+    if (!user?.uid) return;
+
+    try {
+      setIsLoading(true);
+      const response = await fetch(`/api/orders?userId=${user.uid}`);
+      const result = await response.json();
+
+      if (result.success) {
+        setOrders(
+          result.data.map((order: Order) => ({
+            ...order,
+            createdAt: new Date(order.createdAt),
+            updatedAt: new Date(order.updatedAt),
+          }))
+        );
+      } else {
+        showError('Failed to fetch orders', result.error?.message);
+      }
+    } catch (err) {
+      showError('Failed to fetch orders', 'Please try again');
+    } finally {
+      setIsLoading(false);
+    }
+  };
+
+  useEffect(() => {
+    if (user?.uid) {
+      fetchOrders();
+    }
+  }, [user?.uid]);
+
+  const filteredOrders = orders.filter((order) => {
     const matchesSearch = order.orderId.toLowerCase().includes(searchQuery.toLowerCase());
     const matchesStatus = statusFilter === 'all' || order.status === statusFilter;
     return matchesSearch && matchesStatus;
   });
 
-  const getStatusBadgeVariant = (status: keyof typeof ORDER_STATUS_CONFIG) => {
+  const getStatusBadgeVariant = (status: OrderStatus) => {
     switch (status) {
       case 'delivered':
         return 'success';
@@ -84,7 +76,7 @@ export default function OrdersPage() {
     }
   };
 
-  const getPaymentBadge = (status: string) => {
+  const getPaymentBadge = (status: PaymentStatus) => {
     if (status === 'paid') {
       return <Badge variant="success" size="sm">Paid</Badge>;
     }
@@ -94,11 +86,28 @@ export default function OrdersPage() {
     return <Badge variant="default" size="sm">Pending</Badge>;
   };
 
+  if (!isMounted) {
+    return (
+      <div className="max-w-4xl mx-auto flex items-center justify-center h-64">
+        <RefreshCw className="h-8 w-8 animate-spin text-orange-500" />
+      </div>
+    );
+  }
+
   return (
     <div className="max-w-4xl mx-auto">
-      <div className="mb-6">
-        <h1 className="text-2xl font-bold text-gray-900">My Orders</h1>
-        <p className="text-gray-500 mt-1">View and track all your orders</p>
+      <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4 mb-6">
+        <div>
+          <h1 className="text-2xl font-bold text-gray-900">My Orders</h1>
+          <p className="text-gray-500 mt-1">View and track all your orders</p>
+        </div>
+        <Button
+          variant="outline"
+          onClick={fetchOrders}
+          leftIcon={<RefreshCw className={`h-4 w-4 ${isLoading ? 'animate-spin' : ''}`} />}
+        >
+          Refresh
+        </Button>
       </div>
 
       {/* Filters */}
@@ -131,7 +140,12 @@ export default function OrdersPage() {
       </Card>
 
       {/* Orders List */}
-      {filteredOrders.length === 0 ? (
+      {isLoading ? (
+        <Card variant="bordered" className="text-center py-12">
+          <RefreshCw className="h-8 w-8 animate-spin text-orange-500 mx-auto" />
+          <p className="text-gray-500 mt-4">Loading orders...</p>
+        </Card>
+      ) : filteredOrders.length === 0 ? (
         <Card variant="bordered" className="text-center py-12">
           <Package className="h-12 w-12 text-gray-300 mx-auto mb-3" />
           <h3 className="text-lg font-medium text-gray-900 mb-1">No orders found</h3>
@@ -153,17 +167,20 @@ export default function OrdersPage() {
                   <div className="flex flex-wrap items-center gap-2 mb-2">
                     <p className="font-mono font-semibold text-gray-900">{order.orderId}</p>
                     <Badge variant={getStatusBadgeVariant(order.status)} size="sm">
-                      {ORDER_STATUS_CONFIG[order.status].label}
+                      {ORDER_STATUS_CONFIG[order.status]?.label || order.status}
                     </Badge>
                     {getPaymentBadge(order.paymentStatus)}
                   </div>
 
                   <p className="text-sm text-gray-500 mb-2">
-                    {order.itemCount} items • Placed on {formatDate(order.createdAt)}
+                    {order.items.length} items • Placed on {formatDate(order.createdAt)}
                   </p>
 
                   <div className="text-sm text-gray-600">
-                    {order.items.slice(0, 2).join(', ')}
+                    {order.items
+                      .slice(0, 2)
+                      .map((item) => item.productName)
+                      .join(', ')}
                     {order.items.length > 2 && ` +${order.items.length - 2} more`}
                   </div>
                 </div>
@@ -171,12 +188,12 @@ export default function OrdersPage() {
                 <div className="flex items-center gap-4">
                   <div className="text-right">
                     <p className="text-lg font-bold text-gray-900">
-                      {formatCurrency(order.total)}
+                      {formatPrice(order.total)}
                     </p>
                   </div>
-                  <Link href={`/orders/${order.id}`}>
+                  <Link href={`/orders/track?id=${order.orderId}`}>
                     <Button variant="outline" size="sm" leftIcon={<Eye className="h-4 w-4" />}>
-                      View
+                      Track
                     </Button>
                   </Link>
                 </div>

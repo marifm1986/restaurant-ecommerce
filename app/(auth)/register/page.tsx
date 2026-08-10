@@ -7,7 +7,8 @@ import { Eye, EyeOff, Mail, Lock, User, Phone } from 'lucide-react';
 import { Button, Input, Card } from '@/components/ui';
 import { useToast } from '@/components/ui/toast';
 import { useAuthStore } from '@/stores/auth-store';
-import { isValidEmail, isValidPhone } from '@/lib/utils';
+import { useSettings } from '@/providers/settings-provider';
+import { isValidEmail, isValidPhone, getPhoneValidationMessage, getPhonePlaceholder } from '@/lib/utils';
 
 // Google Icon Component
 function GoogleIcon({ className }: { className?: string }) {
@@ -37,6 +38,7 @@ export default function RegisterPage() {
   const router = useRouter();
   const { success, error: showError } = useToast();
   const { signUp, signInWithGoogle, isLoading } = useAuthStore();
+  const { currencyCode } = useSettings();
   const [isGoogleLoading, setIsGoogleLoading] = useState(false);
 
   const [formData, setFormData] = useState({
@@ -64,8 +66,8 @@ export default function RegisterPage() {
 
     if (!formData.phone.trim()) {
       newErrors.phone = 'Phone number is required';
-    } else if (!isValidPhone(formData.phone)) {
-      newErrors.phone = 'Enter a valid 10-digit phone number';
+    } else if (!isValidPhone(formData.phone, currencyCode)) {
+      newErrors.phone = getPhoneValidationMessage(currencyCode);
     }
 
     if (!formData.password) {
@@ -198,7 +200,7 @@ export default function RegisterPage() {
         <Input
           label="Phone Number"
           type="tel"
-          placeholder="10-digit mobile number"
+          placeholder={getPhonePlaceholder(currencyCode)}
           value={formData.phone}
           onChange={handleInputChange('phone')}
           error={errors.phone}

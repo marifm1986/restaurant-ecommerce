@@ -14,8 +14,9 @@ import {
   ShoppingBag,
 } from 'lucide-react';
 import { Card, CardHeader, CardTitle, CardContent, Badge } from '@/components/ui';
-import { formatCurrency, formatDate } from '@/lib/utils';
+import { formatDate } from '@/lib/utils';
 import { ORDER_STATUS_CONFIG } from '@/config/features';
+import { useSettings } from '@/providers/settings-provider';
 
 // Mock dashboard data
 const mockStats = {
@@ -68,6 +69,8 @@ const mockPendingApprovals = [
 ];
 
 export default function AdminDashboardPage() {
+  const { formatPrice } = useSettings();
+
   const getStatusBadgeVariant = (status: keyof typeof ORDER_STATUS_CONFIG) => {
     switch (status) {
       case 'delivered':
@@ -110,7 +113,7 @@ export default function AdminDashboardPage() {
             <div>
               <p className="text-sm text-gray-500">Today's Revenue</p>
               <p className="text-2xl font-bold text-gray-900 mt-1">
-                {formatCurrency(mockStats.todayRevenue)}
+                {formatPrice(mockStats.todayRevenue)}
               </p>
               <p className="text-xs text-green-600 flex items-center mt-1">
                 <TrendingUp className="h-3 w-3 mr-1" /> +8% from yesterday
@@ -187,7 +190,7 @@ export default function AdminDashboardPage() {
                     <div className="flex items-center justify-between text-sm">
                       <span className="text-gray-500">{formatDate(order.createdAt)}</span>
                       <span className="font-semibold text-gray-900">
-                        {formatCurrency(order.total)}
+                        {formatPrice(order.total)}
                       </span>
                     </div>
                   </Link>
@@ -284,7 +287,7 @@ export default function AdminDashboardPage() {
                 <div className="flex items-center justify-between">
                   <span className="text-sm text-gray-500">Revenue</span>
                   <span className="font-semibold text-gray-900">
-                    {formatCurrency(mockStats.monthlyRevenue)}
+                    {formatPrice(mockStats.monthlyRevenue)}
                   </span>
                 </div>
                 <div className="flex items-center justify-between">

@@ -4,8 +4,9 @@ import { useState } from 'react';
 import { Search, Plus, Wallet, User, Calendar, CreditCard } from 'lucide-react';
 import { Card, CardHeader, CardTitle, Button, Badge, Input, Select, Modal, ModalFooter } from '@/components/ui';
 import { useToast } from '@/components/ui/toast';
-import { formatCurrency, formatDateTime } from '@/lib/utils';
+import { formatDateTime } from '@/lib/utils';
 import { PAYMENT_METHODS } from '@/config/features';
+import { useSettings } from '@/providers/settings-provider';
 
 // Mock payments data
 const mockPayments = [
@@ -57,6 +58,7 @@ const mockBuyers = [
 
 export default function AdminPaymentsPage() {
   const { success, error } = useToast();
+  const { formatPrice, currencySymbol } = useSettings();
   const [searchQuery, setSearchQuery] = useState('');
   const [recordModalOpen, setRecordModalOpen] = useState(false);
   const [formData, setFormData] = useState({
@@ -101,7 +103,7 @@ export default function AdminPaymentsPage() {
     if (!validateForm()) return;
 
     // TODO: Implement actual payment recording
-    success('Payment recorded', `Payment of ${formatCurrency(parseFloat(formData.amount))} recorded successfully.`);
+    success('Payment recorded', `Payment of ${formatPrice(parseFloat(formData.amount))} recorded successfully.`);
     setRecordModalOpen(false);
     setFormData({ userId: '', amount: '', method: 'cash', reference: '', notes: '' });
   };
@@ -185,7 +187,7 @@ export default function AdminPaymentsPage() {
 
                 <div className="text-right">
                   <p className="text-2xl font-bold text-green-600">
-                    {formatCurrency(payment.amount)}
+                    {formatPrice(payment.amount)}
                   </p>
                 </div>
               </div>
@@ -223,7 +225,7 @@ export default function AdminPaymentsPage() {
               setFormData({ ...formData, amount: e.target.value });
               if (formErrors.amount) setFormErrors({ ...formErrors, amount: '' });
             }}
-            leftIcon={<span className="text-gray-500">₹</span>}
+            leftIcon={<span className="text-gray-500">{currencySymbol}</span>}
             error={formErrors.amount}
           />
 

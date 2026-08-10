@@ -1,58 +1,95 @@
 'use client';
 
-import { useState, Suspense } from 'react';
+import { useState, useEffect, Suspense } from 'react';
 import { useSearchParams } from 'next/navigation';
-import { Search, Package, Clock, Truck, CheckCircle, AlertCircle } from 'lucide-react';
+import { Search, Package, Clock, Truck, CheckCircle, AlertCircle, RefreshCw } from 'lucide-react';
 import { Button, Input, Card, Badge } from '@/components/ui';
-import { formatCurrency, formatDateTime } from '@/lib/utils';
+import { formatDateTime } from '@/lib/utils';
 import { ORDER_STATUS_CONFIG } from '@/config/features';
+import { useSettings } from '@/providers/settings-provider';
+import { Order, OrderStatus as OrderStatusType, PaymentStatus } from '@/types';
 
-interface OrderStatus {
+interface OrderTimeline {
   status: string;
   date: string;
   description: string;
 }
 
+function buildTimeline(order: Order): OrderTimeline[] {
+  const timeline: OrderTimeline[] = [];
+  const createdAt = new Date(order.createdAt).toISOString();
+
+  // Order placed
+  timeline.push({
+    status: 'Order Placed',
+    date: createdAt,
+    description: 'Your order has been received',
+  });
+
+  // Add status-based timeline
+  const statusOrder: OrderStatusType[] = [
+    'pending_payment',
+    'confirmed',
+    'processing',
+    'shipped',
+    'delivered',
+  ];
+
+  const currentIndex = statusOrder.indexOf(order.status);
+
+  if (order.status === 'cancelled') {
+    timeline.push({
+      status: 'Cancelled',
+      date: new Date(order.updatedAt).toISOString(),
+      description: 'Order has been cancelled',
+    });
+  } else {
+    statusOrder.forEach((status, index) => {
+      if (index <= currentIndex && index > 0) {
+        timeline.push({
+          status: ORDER_STATUS_CONFIG[status]?.label || status,
+          date: createdAt, // In a real app, each status would have its own timestamp
+          description: getStatusDescription(status),
+        });
+      }
+    });
+  }
+
+  return timeline;
+}
+
+function getStatusDescription(status: OrderStatusType): string {
+  switch (status) {
+    case 'confirmed':
+      return 'Order confirmed and being prepared';
+    case 'processing':
+      return 'Order is being processed';
+    case 'shipped':
+      return 'Order has been shipped';
+    case 'delivered':
+      return 'Order has been delivered';
+    default:
+      return '';
+  }
+}
+
 function TrackOrderContent() {
   const searchParams = useSearchParams();
   const initialOrderId = searchParams.get('id') || '';
+  const { formatPrice } = useSettings();
 
   const [orderId, setOrderId] = useState(initialOrderId);
   const [isSearching, setIsSearching] = useState(false);
-  const [orderData, setOrderData] = useState<{
-    orderId: string;
-    status: keyof typeof ORDER_STATUS_CONFIG;
-    total: number;
-    items: { name: string; qty: number; price: number }[];
-    guestInfo: { name: string; phone: string; address: string };
-    createdAt: string;
-    timeline: OrderStatus[];
-  } | null>(initialOrderId ? {
-    // Mock data for demo
-    orderId: initialOrderId,
-    status: 'confirmed',
-    total: 2450,
-    items: [
-      { name: 'Premium Chicken Breast', qty: 5, price: 280 },
-      { name: 'Black Chickpeas (Kala Chana)', qty: 10, price: 95 },
-    ],
-    guestInfo: {
-      name: 'Demo Customer',
-      phone: '01756196928',
-      address: '123 Restaurant Street, Mumbai, MH 400001',
-    },
-    createdAt: new Date().toISOString(),
-    timeline: [
-      { status: 'Order Placed', date: new Date(Date.now() - 3600000).toISOString(), description: 'Your order has been received' },
-      { status: 'Confirmed', date: new Date(Date.now() - 1800000).toISOString(), description: 'Order confirmed and being prepared' },
-    ],
-  } : null);
+  const [orderData, setOrderData] = useState<Order | null>(null);
   const [error, setError] = useState('');
+  const [isMounted, setIsMounted] = useState(false);
 
-  const handleSearch = async (e: React.FormEvent) => {
-    e.preventDefault();
+  useEffect(() => {
+    setIsMounted(true);
+  }, []);
 
-    if (!orderId.trim()) {
+  const fetchOrder = async (searchOrderId: string) => {
+    if (!searchOrderId.trim()) {
       setError('Please enter an order ID');
       return;
     }
@@ -61,40 +98,36 @@ function TrackOrderContent() {
     setError('');
 
     try {
-      // Simulate API call
-      await new Promise((resolve) => setTimeout(resolve, 1000));
+      const response = await fetch(`/api/orders?orderId=${encodeURIComponent(searchOrderId)}`);
+      const result = await response.json();
 
-      // TODO: Replace with actual Firestore query
-      // For demo, show mock data for any order ID starting with 'ORD'
-      if (orderId.startsWith('ORD')) {
+      if (result.success) {
         setOrderData({
-          orderId,
-          status: 'confirmed',
-          total: 2450,
-          items: [
-            { name: 'Premium Chicken Breast', qty: 5, price: 280 },
-            { name: 'Black Chickpeas (Kala Chana)', qty: 10, price: 95 },
-          ],
-          guestInfo: {
-            name: 'Demo Customer',
-            phone: '01756196928',
-            address: '123 Restaurant Street, Mumbai, MH 400001',
-          },
-          createdAt: new Date().toISOString(),
-          timeline: [
-            { status: 'Order Placed', date: new Date(Date.now() - 3600000).toISOString(), description: 'Your order has been received' },
-            { status: 'Confirmed', date: new Date(Date.now() - 1800000).toISOString(), description: 'Order confirmed and being prepared' },
-          ],
+          ...result.data,
+          createdAt: new Date(result.data.createdAt),
+          updatedAt: new Date(result.data.updatedAt),
         });
       } else {
         setOrderData(null);
-        setError('Order not found. Please check your order ID and try again.');
+        setError(result.error?.message || 'Order not found. Please check your order ID and try again.');
       }
     } catch {
       setError('Failed to fetch order. Please try again.');
     } finally {
       setIsSearching(false);
     }
+  };
+
+  // Fetch order on mount if initialOrderId exists
+  useEffect(() => {
+    if (initialOrderId) {
+      fetchOrder(initialOrderId);
+    }
+  }, [initialOrderId]);
+
+  const handleSearch = async (e: React.FormEvent) => {
+    e.preventDefault();
+    await fetchOrder(orderId);
   };
 
   const getStatusIcon = (status: string) => {
@@ -115,7 +148,7 @@ function TrackOrderContent() {
     }
   };
 
-  const getStatusBadgeVariant = (status: keyof typeof ORDER_STATUS_CONFIG) => {
+  const getStatusBadgeVariant = (status: OrderStatusType) => {
     switch (status) {
       case 'delivered':
         return 'success';
@@ -127,6 +160,26 @@ function TrackOrderContent() {
         return 'info';
     }
   };
+
+  const getPaymentBadge = (status: PaymentStatus) => {
+    if (status === 'paid') {
+      return <Badge variant="success" size="sm">Paid</Badge>;
+    }
+    if (status === 'partial') {
+      return <Badge variant="warning" size="sm">Partial</Badge>;
+    }
+    return <Badge variant="warning" size="sm">Pending</Badge>;
+  };
+
+  if (!isMounted) {
+    return (
+      <div className="max-w-3xl mx-auto px-4 sm:px-6 lg:px-8 py-8 flex items-center justify-center h-64">
+        <RefreshCw className="h-8 w-8 animate-spin text-orange-500" />
+      </div>
+    );
+  }
+
+  const timeline = orderData ? buildTimeline(orderData) : [];
 
   return (
     <div className="max-w-3xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
@@ -168,7 +221,7 @@ function TrackOrderContent() {
               </div>
               <Badge variant={getStatusBadgeVariant(orderData.status)} size="md">
                 {getStatusIcon(orderData.status)}
-                <span className="ml-1">{ORDER_STATUS_CONFIG[orderData.status].label}</span>
+                <span className="ml-1">{ORDER_STATUS_CONFIG[orderData.status]?.label || orderData.status}</span>
               </Badge>
             </div>
 
@@ -179,11 +232,11 @@ function TrackOrderContent() {
               </div>
               <div>
                 <p className="text-sm text-gray-500">Total Amount</p>
-                <p className="font-medium text-gray-900">{formatCurrency(orderData.total)}</p>
+                <p className="font-medium text-gray-900">{formatPrice(orderData.total)}</p>
               </div>
               <div className="col-span-2 sm:col-span-1">
                 <p className="text-sm text-gray-500">Payment Status</p>
-                <Badge variant="warning" size="sm">Pending</Badge>
+                {getPaymentBadge(orderData.paymentStatus)}
               </div>
             </div>
           </Card>
@@ -192,13 +245,13 @@ function TrackOrderContent() {
           <Card variant="bordered">
             <h2 className="text-lg font-semibold text-gray-900 mb-4">Order Timeline</h2>
             <div className="space-y-4">
-              {orderData.timeline.map((event, index) => (
+              {timeline.map((event, index) => (
                 <div key={index} className="flex gap-4">
                   <div className="flex flex-col items-center">
                     <div className="w-8 h-8 bg-orange-100 rounded-full flex items-center justify-center text-orange-600">
                       <CheckCircle className="h-4 w-4" />
                     </div>
-                    {index < orderData.timeline.length - 1 && (
+                    {index < timeline.length - 1 && (
                       <div className="w-0.5 h-full bg-orange-200 mt-2" />
                     )}
                   </div>
@@ -219,33 +272,64 @@ function TrackOrderContent() {
               {orderData.items.map((item, index) => (
                 <div key={index} className="flex justify-between items-center py-2 border-b border-gray-50 last:border-0">
                   <div>
-                    <p className="font-medium text-gray-900">{item.name}</p>
-                    <p className="text-sm text-gray-500">Qty: {item.qty}</p>
+                    <p className="font-medium text-gray-900">{item.productName}</p>
+                    <p className="text-sm text-gray-500">Qty: {item.qty} {item.unit}</p>
                   </div>
-                  <p className="font-medium text-gray-900">{formatCurrency(item.price * item.qty)}</p>
+                  <p className="font-medium text-gray-900">{formatPrice(item.totalPrice)}</p>
                 </div>
               ))}
+            </div>
+            <div className="border-t border-gray-100 pt-4 mt-4 space-y-2">
+              <div className="flex justify-between text-sm">
+                <span className="text-gray-600">Subtotal</span>
+                <span className="font-medium">{formatPrice(orderData.subtotal)}</span>
+              </div>
+              <div className="flex justify-between text-sm">
+                <span className="text-gray-600">Tax</span>
+                <span className="font-medium">{formatPrice(orderData.tax)}</span>
+              </div>
+              <div className="flex justify-between text-base font-semibold">
+                <span>Total</span>
+                <span>{formatPrice(orderData.total)}</span>
+              </div>
             </div>
           </Card>
 
           {/* Delivery Info */}
-          <Card variant="bordered">
-            <h2 className="text-lg font-semibold text-gray-900 mb-4">Delivery Information</h2>
-            <div className="space-y-2">
-              <div>
-                <p className="text-sm text-gray-500">Name</p>
-                <p className="font-medium text-gray-900">{orderData.guestInfo.name}</p>
+          {orderData.guestInfo && (
+            <Card variant="bordered">
+              <h2 className="text-lg font-semibold text-gray-900 mb-4">Delivery Information</h2>
+              <div className="space-y-2">
+                <div>
+                  <p className="text-sm text-gray-500">Name</p>
+                  <p className="font-medium text-gray-900">{orderData.guestInfo.name}</p>
+                </div>
+                <div>
+                  <p className="text-sm text-gray-500">Phone</p>
+                  <p className="font-medium text-gray-900">{orderData.guestInfo.phone}</p>
+                </div>
+                <div>
+                  <p className="text-sm text-gray-500">Email</p>
+                  <p className="font-medium text-gray-900">{orderData.guestInfo.email}</p>
+                </div>
+                <div>
+                  <p className="text-sm text-gray-500">Address</p>
+                  <p className="font-medium text-gray-900">{orderData.guestInfo.address}</p>
+                </div>
               </div>
-              <div>
-                <p className="text-sm text-gray-500">Phone</p>
-                <p className="font-medium text-gray-900">{orderData.guestInfo.phone}</p>
-              </div>
-              <div>
-                <p className="text-sm text-gray-500">Address</p>
-                <p className="font-medium text-gray-900">{orderData.guestInfo.address}</p>
-              </div>
-            </div>
-          </Card>
+            </Card>
+          )}
+
+          {/* Payment Instructions for Pending Payment */}
+          {orderData.status === 'pending_payment' && (
+            <Card variant="bordered" className="bg-orange-50 border-orange-200">
+              <h3 className="font-medium text-orange-800 mb-2">Payment Instructions</h3>
+              <p className="text-sm text-orange-700">
+                This is a manual payment order. Please make the payment via UPI, bank transfer, or cash.
+                Contact us at <strong>01756196928</strong> to confirm your payment.
+              </p>
+            </Card>
+          )}
         </div>
       )}
     </div>
@@ -254,7 +338,11 @@ function TrackOrderContent() {
 
 export default function TrackOrderPage() {
   return (
-    <Suspense fallback={<div className="max-w-3xl mx-auto px-4 py-8">Loading...</div>}>
+    <Suspense fallback={
+      <div className="max-w-3xl mx-auto px-4 py-8 flex items-center justify-center h-64">
+        <RefreshCw className="h-8 w-8 animate-spin text-orange-500" />
+      </div>
+    }>
       <TrackOrderContent />
     </Suspense>
   );

@@ -5,11 +5,12 @@ import Image from 'next/image';
 import { Trash2, Plus, Minus, ShoppingBag, ArrowLeft } from 'lucide-react';
 import { useCartStore } from '@/stores/cart-store';
 import { Button, Card } from '@/components/ui';
-import { formatCurrency } from '@/lib/utils';
 import { APP_CONFIG } from '@/config/features';
+import { useSettings } from '@/providers/settings-provider';
 
 export default function CartPage() {
   const { items, updateQuantity, removeItem, clearCart, getSubtotal, getTax, getTotal } = useCartStore();
+  const { formatPrice } = useSettings();
 
   if (items.length === 0) {
     return (
@@ -79,7 +80,7 @@ export default function CartPage() {
                         {item.productName}
                       </h3>
                       <p className="text-sm text-gray-500 mb-2">
-                        {formatCurrency(item.price)} / {item.unit}
+                        {formatPrice(item.price)} / {item.unit}
                       </p>
 
                       {/* Quantity Controls */}
@@ -116,7 +117,7 @@ export default function CartPage() {
                     {/* Item Total */}
                     <div className="text-right">
                       <p className="font-semibold text-gray-900">
-                        {formatCurrency(item.price * item.qty)}
+                        {formatPrice(item.price * item.qty)}
                       </p>
                     </div>
                   </div>
@@ -142,11 +143,11 @@ export default function CartPage() {
             <div className="space-y-3 mb-4">
               <div className="flex justify-between text-sm">
                 <span className="text-gray-600">Subtotal</span>
-                <span className="font-medium">{formatCurrency(getSubtotal())}</span>
+                <span className="font-medium">{formatPrice(getSubtotal())}</span>
               </div>
               <div className="flex justify-between text-sm">
                 <span className="text-gray-600">Tax ({APP_CONFIG.TAX_RATE * 100}% GST)</span>
-                <span className="font-medium">{formatCurrency(getTax())}</span>
+                <span className="font-medium">{formatPrice(getTax())}</span>
               </div>
               <div className="flex justify-between text-sm">
                 <span className="text-gray-600">Delivery</span>
@@ -157,7 +158,7 @@ export default function CartPage() {
             <div className="border-t border-gray-100 pt-4 mb-6">
               <div className="flex justify-between">
                 <span className="text-base font-semibold text-gray-900">Total</span>
-                <span className="text-xl font-bold text-gray-900">{formatCurrency(getTotal())}</span>
+                <span className="text-xl font-bold text-gray-900">{formatPrice(getTotal())}</span>
               </div>
             </div>
 

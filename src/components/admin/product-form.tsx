@@ -6,15 +6,9 @@ import { Save, X, Plus, Trash2 } from 'lucide-react';
 import { Card, CardContent, CardHeader, CardTitle, Button, Input, Select, ImageUpload } from '@/components/ui';
 import { useToast } from '@/components/ui/toast';
 import { PRODUCT_CATEGORIES } from '@/config/features';
-import { Product, ProductUnit, BulkPricing } from '@/types';
-
-const PRODUCT_UNITS: { value: ProductUnit; label: string }[] = [
-  { value: 'kg', label: 'Kilogram (kg)' },
-  { value: 'piece', label: 'Piece' },
-  { value: 'case', label: 'Case' },
-  { value: 'liter', label: 'Liter' },
-  { value: 'dozen', label: 'Dozen' },
-];
+import { Product, ProductUnit, ProductVariant, BulkPricing } from '@/types';
+import { UnitVariantSelector } from './unit-variant-selector';
+import { getVariantsForUnit } from '@/config/units';
 
 interface ProductFormProps {
   product?: Product;
@@ -27,8 +21,10 @@ interface FormData {
   category: string;
   description: string;
   price: string;
+  purchasePrice: string;
   stockQty: string;
   unit: ProductUnit;
+  variants: ProductVariant[];
   isActive: boolean;
   bulkPricing: BulkPricing[];
   imageUrls: string[];
@@ -39,14 +35,27 @@ export function ProductForm({ product, isEditing = false }: ProductFormProps) {
   const { success, error } = useToast();
   const [isSubmitting, setIsSubmitting] = useState(false);
 
+  // Get default variants for the initial unit
+  const getInitialVariants = (): ProductVariant[] => {
+    if (product?.variants && product.variants.length > 0) {
+      return product.variants;
+    }
+    // Default to first variant of the unit
+    const defaultUnit = product?.unit || 'kg';
+    const unitVariants = getVariantsForUnit(defaultUnit);
+    return unitVariants.length > 0 ? [unitVariants[0]] : [];
+  };
+
   const [formData, setFormData] = useState<FormData>({
     name: product?.name || '',
     sku: product?.sku || '',
     category: product?.category || '',
     description: product?.description || '',
     price: product?.price?.toString() || '',
+    purchasePrice: product?.purchasePrice?.toString() || '',
     stockQty: product?.stockQty?.toString() || '0',
     unit: product?.unit || 'kg',
+    variants: getInitialVariants(),
     isActive: product?.isActive ?? true,
     bulkPricing: product?.bulkPricing || [],
     imageUrls: product?.imageUrls || [],
@@ -72,11 +81,19 @@ export function ProductForm({ product, isEditing = false }: ProductFormProps) {
     }
 
     if (!formData.price || isNaN(Number(formData.price)) || Number(formData.price) <= 0) {
-      newErrors.price = 'Valid price is required';
+      newErrors.price = 'Valid selling price is required';
+    }
+
+    if (formData.purchasePrice && (isNaN(Number(formData.purchasePrice)) || Number(formData.purchasePrice) < 0)) {
+      newErrors.purchasePrice = 'Purchase price must be a non-negative number';
     }
 
     if (formData.stockQty && (isNaN(Number(formData.stockQty)) || Number(formData.stockQty) < 0)) {
       newErrors.stockQty = 'Stock quantity must be a non-negative number';
+    }
+
+    if (formData.variants.length === 0) {
+      newErrors.variants = 'At least one variant is required';
     }
 
     // Validate bulk pricing
@@ -116,8 +133,10 @@ export function ProductForm({ product, isEditing = false }: ProductFormProps) {
         category: formData.category,
         description: formData.description.trim(),
         price: Number(formData.price),
+        purchasePrice: formData.purchasePrice ? Number(formData.purchasePrice) : undefined,
         stockQty: Number(formData.stockQty) || 0,
         unit: formData.unit,
+        variants: formData.variants,
         isActive: formData.isActive,
         bulkPricing: formData.bulkPricing,
         imageUrls: formData.imageUrls,
@@ -154,10 +173,24 @@ export function ProductForm({ product, isEditing = false }: ProductFormProps) {
     }
   };
 
-  const handleChange = (field: keyof FormData, value: string | boolean | ProductUnit) => {
+  const handleChange = (field: keyof FormData, value: string | boolean | ProductUnit | ProductVariant[]) => {
     setFormData((prev) => ({ ...prev, [field]: value }));
     if (errors[field]) {
       setErrors((prev) => ({ ...prev, [field]: undefined }));
+    }
+  };
+
+  const handleUnitChange = (unit: ProductUnit) => {
+    setFormData((prev) => ({ ...prev, unit }));
+    if (errors.unit) {
+      setErrors((prev) => ({ ...prev, unit: undefined }));
+    }
+  };
+
+  const handleVariantsChange = (variants: ProductVariant[]) => {
+    setFormData((prev) => ({ ...prev, variants }));
+    if (errors.variants) {
+      setErrors((prev) => ({ ...prev, variants: undefined }));
     }
   };
 
@@ -212,27 +245,22 @@ export function ProductForm({ product, isEditing = false }: ProductFormProps) {
                 required
               />
 
-              <Select
-                label="Category"
-                value={formData.category}
-                onChange={(e) => handleChange('category', e.target.value)}
-                options={[
-                  { value: '', label: 'Select a category' },
-                  ...PRODUCT_CATEGORIES.map((cat) => ({
-                    value: cat.slug,
-                    label: cat.name,
-                  })),
-                ]}
-                error={errors.category}
-                required
-              />
-
-              <Select
-                label="Unit"
-                value={formData.unit}
-                onChange={(e) => handleChange('unit', e.target.value as ProductUnit)}
-                options={PRODUCT_UNITS}
-              />
+              <div className="md:col-span-2">
+                <Select
+                  label="Category"
+                  value={formData.category}
+                  onChange={(e) => handleChange('category', e.target.value)}
+                  options={[
+                    { value: '', label: 'Select a category' },
+                    ...PRODUCT_CATEGORIES.map((cat) => ({
+                      value: cat.slug,
+                      label: cat.name,
+                    })),
+                  ]}
+                  error={errors.category}
+                  required
+                />
+              </div>
 
               <div className="md:col-span-2">
                 <label className="block text-sm font-medium text-gray-700 mb-1">
@@ -247,6 +275,22 @@ export function ProductForm({ product, isEditing = false }: ProductFormProps) {
                 />
               </div>
             </div>
+          </CardContent>
+        </Card>
+
+        {/* Unit & Variants */}
+        <Card variant="bordered" className="bg-white">
+          <CardHeader>
+            <CardTitle>Unit & Variants</CardTitle>
+          </CardHeader>
+          <CardContent>
+            <UnitVariantSelector
+              selectedUnit={formData.unit}
+              selectedVariants={formData.variants}
+              onUnitChange={handleUnitChange}
+              onVariantsChange={handleVariantsChange}
+              error={errors.variants}
+            />
           </CardContent>
         </Card>
 
@@ -270,16 +314,28 @@ export function ProductForm({ product, isEditing = false }: ProductFormProps) {
             <CardTitle>Pricing & Inventory</CardTitle>
           </CardHeader>
           <CardContent>
-            <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
               <Input
-                label="Base Price"
+                label="Selling Price"
                 type="number"
                 placeholder="0.00"
                 value={formData.price}
                 onChange={(e) => handleChange('price', e.target.value)}
                 error={errors.price}
                 leftIcon={<span className="text-gray-500">&#8377;</span>}
+                hint="Price shown to customers"
                 required
+              />
+
+              <Input
+                label="Purchase Price"
+                type="number"
+                placeholder="0.00"
+                value={formData.purchasePrice}
+                onChange={(e) => handleChange('purchasePrice', e.target.value)}
+                error={errors.purchasePrice}
+                leftIcon={<span className="text-gray-500">&#8377;</span>}
+                hint="Cost price for margin tracking"
               />
 
               <Input
@@ -303,6 +359,24 @@ export function ProductForm({ product, isEditing = false }: ProductFormProps) {
                 </label>
               </div>
             </div>
+
+            {/* Profit Margin Display */}
+            {formData.price && formData.purchasePrice && Number(formData.purchasePrice) > 0 && (
+              <div className="mt-4 p-3 bg-gray-50 rounded-lg">
+                <div className="flex items-center justify-between text-sm">
+                  <span className="text-gray-600">Profit Margin:</span>
+                  <span className={`font-medium ${
+                    Number(formData.price) > Number(formData.purchasePrice)
+                      ? 'text-green-600'
+                      : 'text-red-600'
+                  }`}>
+                    {((Number(formData.price) - Number(formData.purchasePrice)) / Number(formData.price) * 100).toFixed(1)}%
+                    {' '}
+                    (&#8377;{(Number(formData.price) - Number(formData.purchasePrice)).toFixed(2)} per unit)
+                  </span>
+                </div>
+              </div>
+            )}
           </CardContent>
         </Card>
 
